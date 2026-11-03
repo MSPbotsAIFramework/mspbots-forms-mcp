@@ -410,3 +410,100 @@ async def test_form_get_field_id_path_introduces_no_shared_state(monkeypatch):
     )
     assert payload_a["name"] == "client_org"
     assert payload_b["error"]["code"] == "not_found"
+
+
+@pytest.mark.asyncio
+async def test_form_get_field_id_pages_through_every_option(monkeypatch):
+    """TC8 / AC8 (rework r3, source: INT test 2026-11-03). r2 stopped the
+    185-option client_org question from collapsing, but one response only
+    ever held 71 of them and there was no way to ask for the other 114 --
+    the ticket's AC ("every option ... retained") still could not be met.
+    Following next_choices_offset must now walk the whole option list, with
+    every option's source attributes intact and no option seen twice."""
+
+    async def fake_get(self, path, params=None):
+        return {
+            "id": "f7528a78",
+            "definition": _client_org_choices_source_definition(num_items=185, num_missing_tenant=37),
+        }
+
+    seen = []
+    offset = 0
+    pages = 0
+    while True:
+        payload = await _call_form_get(
+            monkeypatch,
+            fake_get,
+            {"form_id": "f7528a78", "field_id": "client_org", "choices_offset": offset},
+        )
+        pages += 1
+        assert payload["choices_total"] == 185
+        assert payload["choices_offset"] == offset
+        assert payload["choices_returned"] == len(payload["choices"])
+        assert payload["choices_returned"] > 0
+        assert len(json.dumps(payload, separators=(",", ":"))) <= 20_000
+        for item in payload["choices"]:
+            assert item["attrs"]["haloClientId"] and item["attrs"]["rewstOrgId"]
+            seen.append(item["value"])
+        if payload["next_choices_offset"] is None:
+            assert "truncated" not in payload
+            break
+        offset = payload["next_choices_offset"]
+        assert pages < 20  # guard against a non-advancing page
+
+    assert len(seen) == 185
+    assert len(set(seen)) == 185
+
+
+@pytest.mark.asyncio
+async def test_form_get_field_id_choices_limit_caps_the_page(monkeypatch):
+    """TC8 complement: choices_limit bounds a page even when more would
+    fit, and the response still points at the rest."""
+
+    async def fake_get(self, path, params=None):
+        return {
+            "id": "f7528a78",
+            "definition": _client_org_choices_source_definition(num_items=185, num_missing_tenant=37),
+        }
+
+    payload = await _call_form_get(
+        monkeypatch,
+        fake_get,
+        {"form_id": "f7528a78", "field_id": "client_org", "choices_limit": 5},
+    )
+
+    assert payload["choices_returned"] == 5
+    assert payload["choices_total"] == 185
+    assert payload["next_choices_offset"] == 5
+
+
+@pytest.mark.asyncio
+async def test_form_get_oversized_whole_form_keeps_the_base_record(monkeypatch):
+    """TC9 / AC9 (rework r3, source: INT test 2026-11-03). The unfiltered
+    call was never fixed: a whole-form response past the budget has no
+    top-level list, so dump_json_capped discarded all of it and returned a
+    116-char notice with no form data. The identifying fields must survive,
+    and the response must name what was dropped so the caller can re-ask
+    for it with field_id."""
+
+    async def fake_get(self, path, params=None):
+        return {
+            "id": "f7528a78",
+            "title": "[Ginko IT] Microsoft: User Offboarding",
+            "status": "published",
+            "questionCount": 41,
+            "latestVersion": 4,
+            "definition": _client_org_choices_source_definition(num_items=185, num_missing_tenant=37),
+        }
+
+    payload = await _call_form_get(
+        monkeypatch, fake_get, {"form_id": "f7528a78", "include": ["definition"]}
+    )
+
+    assert payload["id"] == "f7528a78"
+    assert payload["title"] == "[Ginko IT] Microsoft: User Offboarding"
+    assert payload["questionCount"] == 41
+    assert payload["latestVersion"] == 4
+    assert payload["truncated"] is True
+    assert payload["omitted_fields"] == ["definition"]
+    assert len(json.dumps(payload, separators=(",", ":"))) <= 20_000
