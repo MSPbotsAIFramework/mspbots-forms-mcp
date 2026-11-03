@@ -18,7 +18,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from .._json import dump_json_capped, error_envelope
+from .._json import dump_choices_page, dump_json_capped, error_envelope
 from ..api_client import FormsAPIClient, FormsAPIError
 from ._common import NO_TOKEN
 from ._survey_walk import find_question_by_name, normalize_choice_source
@@ -84,6 +84,30 @@ def register(mcp: FastMCP, client_factory: Callable[[], FormsAPIClient | None]) 
                 )
             ),
         ] = None,
+        choices_offset: Annotated[
+            int,
+            Field(
+                description=(
+                    "Optional — with field_id, the index of the first choice "
+                    "to return (default 0). Use the next_choices_offset the "
+                    "previous call returned to read the rest of a question "
+                    "whose options don't fit one response."
+                ),
+                ge=0,
+            ),
+        ] = 0,
+        choices_limit: Annotated[
+            int | None,
+            Field(
+                description=(
+                    "Optional — with field_id, the maximum number of choices "
+                    "to return in this call. Fewer may come back if they "
+                    "don't fit the response budget; choices_returned and "
+                    "next_choices_offset always say what actually happened."
+                ),
+                ge=1,
+            ),
+        ] = None,
     ) -> str:
         """Get a form's details.
 
@@ -93,6 +117,12 @@ def register(mcp: FastMCP, client_factory: Callable[[], FormsAPIClient | None]) 
         include=["questions"] never carries choice-level custom properties.
         To read one question's full choice metadata without risking
         truncation, pass field_id instead of include.
+
+        A question with many options can exceed one response's budget; the
+        field_id response then reports choices_offset / choices_returned /
+        choices_total / next_choices_offset. Call again with
+        choices_offset=next_choices_offset until it comes back null to read
+        every option (PRD-21379).
         """
         client = client_factory()
         if client is None:
@@ -123,7 +153,23 @@ def register(mcp: FastMCP, client_factory: Callable[[], FormsAPIClient | None]) 
         # only scans top-level list values) can see and cap the option list
         # instead of discarding it entirely.
         question = normalize_choice_source(question)
-        return dump_json_capped({"form_id": form_id, "field_id": field_id, **question})
+        choices = question.get("choices")
+        if not isinstance(choices, list):
+            return dump_json_capped({"form_id": form_id, "field_id": field_id, **question})
+        # PRD-21379 rework r3: one response cannot hold every option of a
+        # large question (185 options ~= 51KB against a 20,000-char budget),
+        # and silently returning the first screenful drops the rest beyond
+        # reach. Page instead, so repeated calls can read all of them.
+        base = {k: v for k, v in question.items() if k != "choices"}
+        window = choices[choices_offset:]
+        if choices_limit is not None:
+            window = window[:choices_limit]
+        return dump_choices_page(
+            {"form_id": form_id, "field_id": field_id, **base},
+            window,
+            choices_offset,
+            len(choices),
+        )
 
     @mcp.tool()
     async def mspbots_forms_form_create(
