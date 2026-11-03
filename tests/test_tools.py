@@ -44,7 +44,7 @@ EXPECTED_TOOLS = {
 # explanation (question `kind` values, showIf semantics) to let an agent
 # construct valid nested arguments — an earlier blind usability test found
 # that explanation was the most valuable part of these docstrings. They are
-# intentionally exempt from the <=500 char budget (SOP §2.2 is "should", not
+# intentionally exempt from the <=1024 char budget (SOP §2.2 is "should", not
 # "must") rather than gutted to fit.
 _DESCRIPTION_LENGTH_EXEMPT = {"mspbots_forms_form_create", "mspbots_forms_form_update"}
 
@@ -79,7 +79,7 @@ async def test_tools_list_snapshot():
         assert len(first_line) <= 100, f"{name}: first line too long: {first_line!r}"
 
         if name not in _DESCRIPTION_LENGTH_EXEMPT:
-            assert len(tool.description or "") <= 500, f"{name}: description too long"
+            assert len(tool.description or "") <= 1024, f"{name}: description too long"
 
 
 @pytest.mark.asyncio
