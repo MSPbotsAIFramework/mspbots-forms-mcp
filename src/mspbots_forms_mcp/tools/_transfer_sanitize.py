@@ -75,6 +75,31 @@ def validate_export_version(payload: dict) -> None:
         )
 
 
+def validate_form_payload(payload: dict) -> None:
+    """Raise TransferError if payload's "form" field is missing, empty, or
+    the envelope itself carries truncated/omitted_fields markers (rework
+    r2, FIND1: dump_json_capped's generic cap used to shed the whole "form"
+    field for an oversized form, and import proceeded anyway, creating an
+    empty "Untitled form" with no error). Must be called before any
+    create/patch call, same "never half-import" principle AC6 already
+    states for an unsupported export_version (validate_export_version)."""
+    if payload.get("truncated") or payload.get("omitted_fields"):
+        raise TransferError(
+            "invalid_argument",
+            "export_payload is truncated/incomplete (omitted: "
+            f"{payload.get('omitted_fields') or ['form']}). Re-export "
+            "without truncation and try again.",
+            retryable=False,
+        )
+    form = payload.get("form")
+    if not isinstance(form, dict) or not form:
+        raise TransferError(
+            "invalid_argument",
+            "export_payload.form is missing or empty.",
+            retryable=False,
+        )
+
+
 def _field_label(node: dict) -> str:
     """Best-effort human-readable name for a report entry. SurveyJS-shaped
     question dicts carry "name" (the generated q1/q2 id) and/or "title" (the
@@ -90,18 +115,23 @@ def strip_tenant_specific(definition: dict) -> tuple[dict, list[dict]]:
     removing anything tenant-specific and returning a report of what was
     removed.
 
-    Two cases, each independently detected on every dict in the tree:
+    Three cases, each independently detected on every dict in the tree:
       - a dict with "choicesByUrl" -> that key is dropped and "choices" (if
         present) is cleared; reported as "data-source-bound (choicesByUrl)".
-      - a dict with static choice options (either a top-level "choices"
-        list, or a "choicesSource": {"items": [...]} dict — the shape
-        live-tested and confirmed for the real client_org question on
-        sibling ticket PRD-21379, see _choice_keys below) whose items carry
-        any key in TENANT_SCOPED_CHOICE_KEYS (checked both on the item
-        itself and inside a nested "attrs" dict, the real client_org
-        shape) -> the options are cleared (and "choicesSource" dropped
-        entirely, same wholesale-clear treatment as choicesByUrl); reported
-        as "static tenant-scoped options (<matched keys>)".
+      - a dict with "choicesSource" -> that key is dropped and "choices" (if
+        present) is cleared; reported as "data-source-bound (choicesSource)".
+        Unconditional, regardless of whether any item carries a
+        tenant-scoped key (rework r2, COV2): choicesSource is also Forms'
+        wire shape for a live/external ("mcp"/"api") binding with no fixed
+        item shape, and by construction anything using choicesSource
+        instead of a plain "choices" list is sourced from somewhere outside
+        the static definition -- not portable, static data, the same
+        category choicesByUrl already gets flagged for.
+      - a dict with a plain, non-sourced top-level "choices" list whose
+        items carry any key in TENANT_SCOPED_CHOICE_KEYS -> the options are
+        cleared; reported as "static tenant-scoped options (<matched
+        keys>)". Only reached when neither of the two data-source cases
+        above already matched.
 
     Returns a deep copy — the caller's original definition is never mutated.
     """
@@ -134,35 +164,50 @@ def _walk(node: Any, report: list[dict]) -> None:
                 {"field": _field_label(node), "reason": "data-source-bound (choicesByUrl)"}
             )
 
-        # A static-choice question's options can live under a top-level
-        # "choices" list, or under "choicesSource": {"items": [...]} (the
-        # real shape confirmed for client_org — see docstring above).
-        # normalize_choice_source (_survey_walk.py, already live-tested on
-        # PRD-21379) is read-only here: it returns `node` itself unchanged
-        # when there's nothing to normalize, or a *new* dict otherwise, so
-        # peeking at it never mutates the tree unless a tenant-scoped match
-        # is actually found below.
-        candidate = normalize_choice_source(node) if "choicesSource" in node else node
-        choices = candidate.get("choices")
-        if isinstance(choices, list):
+        elif "choicesSource" in node:
+            # Unconditional (rework r2, COV2) -- see strip_tenant_specific's
+            # docstring: any choicesSource-shaped question is
+            # data-source-bound by construction, the same wholesale-clear
+            # treatment as choicesByUrl above, regardless of whether any
+            # item carries a tenant-scoped key. Still surface the matched
+            # key names in the reason when present (TC11, round 2) so the
+            # import report keeps naming exactly what was tenant-scoped,
+            # not just that the question was data-source-bound.
+            candidate = normalize_choice_source(node)
             matched_keys: set[str] = set()
-            for choice in choices:
-                if isinstance(choice, dict):
-                    matched_keys |= TENANT_SCOPED_CHOICE_KEYS & _choice_keys(choice)
+            items = candidate.get("choices")
+            if isinstance(items, list):
+                for choice in items:
+                    if isinstance(choice, dict):
+                        matched_keys |= TENANT_SCOPED_CHOICE_KEYS & _choice_keys(choice)
+
+            node.pop("choicesSource", None)
+            node["choices"] = []
+            reason = "data-source-bound (choicesSource)"
             if matched_keys:
-                if candidate is not node:
-                    # The match lived inside choicesSource.items -- drop the
-                    # whole source rather than leaving a flattened "choices"
-                    # list standing in for it (same wholesale-clear
-                    # treatment as choicesByUrl above).
-                    node.pop("choicesSource", None)
-                node["choices"] = []
-                report.append(
-                    {
-                        "field": _field_label(node),
-                        "reason": f"static tenant-scoped options ({', '.join(sorted(matched_keys))})",
-                    }
-                )
+                reason += f"; tenant-scoped: {', '.join(sorted(matched_keys))}"
+            report.append({"field": _field_label(node), "reason": reason})
+
+        else:
+            # A plain, non-sourced static-choice question's options live
+            # under a top-level "choices" list. Only cleared when an item
+            # carries a tenant-scoped key (e.g. Ginko's client_org options
+            # before choicesSource adoption); an ordinary static list (TC6)
+            # is left untouched.
+            choices = node.get("choices")
+            if isinstance(choices, list):
+                matched_keys: set[str] = set()
+                for choice in choices:
+                    if isinstance(choice, dict):
+                        matched_keys |= TENANT_SCOPED_CHOICE_KEYS & _choice_keys(choice)
+                if matched_keys:
+                    node["choices"] = []
+                    report.append(
+                        {
+                            "field": _field_label(node),
+                            "reason": f"static tenant-scoped options ({', '.join(sorted(matched_keys))})",
+                        }
+                    )
 
         for value in node.values():
             _walk(value, report)

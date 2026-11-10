@@ -22,7 +22,7 @@ from typing import Annotated
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
-from .._json import dump_json_capped, error_envelope
+from .._json import dump_json, dump_json_capped, error_envelope
 from ..api_client import FormsAPIClient, FormsAPIError
 from ._common import NO_TOKEN
 from ._transfer_sanitize import (
@@ -31,6 +31,7 @@ from ._transfer_sanitize import (
     is_transferable_setting,
     strip_tenant_specific,
     validate_export_version,
+    validate_form_payload,
 )
 
 
@@ -59,7 +60,13 @@ def register(mcp: FastMCP, client_factory: Callable[[], FormsAPIClient | None]) 
             )
         except FormsAPIError as e:
             return e.to_envelope()
-        return dump_json_capped(
+        # FIND1 (rework r2): dump_json_capped's generic cap sheds the whole
+        # dict-shaped "form" field for an oversized form -- this envelope
+        # is saved to a file for a later mspbots_forms_form_import, never
+        # read as agent-facing conversation context, so the token-economy
+        # cap every other tool in this server uses is the wrong default
+        # here. See dump_json's docstring (_json.py).
+        return dump_json(
             {
                 "export_version": EXPORT_SCHEMA_VERSION,
                 "source_form_id": form_id,
@@ -107,15 +114,30 @@ def register(mcp: FastMCP, client_factory: Callable[[], FormsAPIClient | None]) 
             return NO_TOKEN
         try:
             validate_export_version(export_payload)
+            # FIND1 (rework r2): refuse a structurally incomplete "form"
+            # (missing, empty, or carrying truncated/omitted_fields
+            # markers) outright -- never silently create an empty
+            # "Untitled form" from it.
+            validate_form_payload(export_payload)
         except TransferError as e:
             return e.to_envelope()
 
-        form = export_payload.get("form") or {}
+        form = export_payload["form"]
         title = form.get("title") or "Untitled form"
         definition = form.get("definition") or {}
         new_title = f"{title}{title_suffix}"
 
         stripped_definition, report = strip_tenant_specific(definition)
+        # COV1 (rework r2): the source definition's own top-level "title"
+        # (a standard SurveyJS root-level property, independent of the
+        # wrapping form record's "title") must also be overridden to the
+        # suffixed new title -- otherwise this same PATCH call's nested
+        # definition.title silently overrides the outer "title" key on the
+        # backend, and the " (imported)" suffix reverts once persisted even
+        # though this tool's own echoed response already said the right
+        # title.
+        if "title" in stripped_definition:
+            stripped_definition["title"] = new_title
 
         # PRD-21397 AC2 (settings fidelity, e.g. showProgressBar, "requires
         # Microsoft 365 sign-in", thank-you message): `form` is the raw
