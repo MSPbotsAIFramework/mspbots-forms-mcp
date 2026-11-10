@@ -15,6 +15,20 @@ def _compact(data: Any) -> str:
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
 
 
+def dump_json(data: Any) -> str:
+    """Serialize data compactly with no size cap.
+
+    Use only for a payload that is saved to a file or otherwise round-
+    tripped by another tool call rather than read as agent-facing
+    conversation context (e.g. mspbots_forms_form_export's envelope, fed
+    back into mspbots_forms_form_import) -- dump_json_capped's ~20,000-char
+    token-economy budget is right for every other tool in this server, but
+    silently shedding the one field an export/import round trip depends on
+    (rework r2, FIND1) is worse than returning an uncapped blob here.
+    """
+    return _compact(data)
+
+
 def dump_json_capped(data: Any, max_chars: int = MAX_CHARS) -> str:
     """Serialize data compactly, truncating the largest list field (or the
     top-level list) if the result would exceed max_chars, rather than ever
