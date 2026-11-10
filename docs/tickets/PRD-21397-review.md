@@ -1,6 +1,6 @@
 # PRD-21397 · Code review
 
-Status: frozen @ 6aeb094
+Status: frozen @ cf66818
 
 ## Round 1 · 2026-10-29 · reviewed dev/PRD-21397 @ 47b110b (base main @ 35c6ccf)
 
@@ -111,3 +111,43 @@ No new must-fix found. No other must-fix findings from rounds 1-2 remain open.
 | SOP §14 checklist | Satisfied per round 1/2's own checks, re-confirmed above (Chinese scan, README, tests, smoke) |
 
 Reused `src/mspbots_forms_mcp/tools/_survey_walk.py` (sibling ticket's existing module) rather than re-deriving `choicesSource` handling — correct reuse, not a duplicate implementation.
+
+## Round 4 · 2026-11-10 · reviewed dev/PRD-21397 @ cf66818 (base main @ 62e4dc0)
+
+Verdict: approved
+
+### Context
+
+This round reviews rework r2 (`docs/tickets/PRD-21397-r2.md`), not a fresh ticket: rounds 1-3 above were approved, merged (`52a707e`), and released to INT; `[QA-NIGHT] FAIL on INT (QA run #305)` then reported four gaps against the released build (`main@62e4dc0`). The rework triage classifies all four as implementation error (requirement unchanged), and the dev leg fixed three of them (COV1, COV2, FIND1) plus formalized one new AC (AC9) and backfilled `dw` tags on all cases. Scope of this round's diff: `62e4dc0..cf66818` — `src/mspbots_forms_mcp/_json.py`, `src/mspbots_forms_mcp/tools/_transfer_sanitize.py`, `src/mspbots_forms_mcp/tools/transfer.py`, `tests/test_transfer.py`, `docs/tickets/PRD-21397-r2.md`, `docs/tickets/PRD-21397.ac.json`, `docs/tickets/PRD-21397.md` (one-line "Superseded by" header addition, not a rewrite of frozen content). No other files touched.
+
+### Findings
+
+No must-fix found.
+
+1. [suggestion] `src/mspbots_forms_mcp/tools/transfer.py:170-177` — the create/patch two-call sequence remains non-atomic (pre-existing, documented, unrelated to this round's diff): a patch failure after a successful create leaves an orphaned draft shell form. Not reopened here — same accepted gap as rounds 1-3, out of this rework's scope (COV1/COV2/FIND1 only).
+
+### Independent verification performed this round
+
+- **COV1 (title override)**: traced `transfer.py:118-137` — `stripped_definition["title"]` is now overridden to `new_title` whenever the source definition carries its own top-level `"title"`, closing the exact collision QA-NIGHT reported (nested `definition.title` silently out-ranking the outer PATCH `"title"` on the backend). `tests/test_transfer.py::test_import_overrides_title_inside_definition_as_well_as_outer_patch_body` (TC13) uses a fixture with a nested `definition.title` — the real-world shape round 1's fixture omitted — and asserts both the outer and nested title end up as the suffixed new title.
+- **COV2 (choicesSource unconditional)**: traced `_transfer_sanitize.py`'s `_walk` — `choicesSource` is now its own `elif` branch, always popped and reported as `data-source-bound (choicesSource)` regardless of whether any item matches `TENANT_SCOPED_CHOICE_KEYS` (those keys are still surfaced in the reason string when present, so TC11's existing assertion on matched-key naming keeps passing unchanged). The round-2 test asserting the opposite premise (`test_choices_source_shaped_ordinary_choices_are_not_over_stripped`) was revised into `test_choices_source_without_tenant_key_match_is_still_treated_as_data_source_bound` (TC14) rather than left contradicting the new behavior — correctly judged as implementing the fix, not a change to a governed `.ac.json` case (that test was a round-2-added extra, `source: dev`, never one of TC1-TC12).
+- **FIND1 (uncapped export / refuse-on-truncation import)**: traced `_json.py`'s new `dump_json` (plain `_compact`, no cap) and confirmed `mspbots_forms_form_export` now uses it instead of `dump_json_capped` — every other tool call in this server is untouched (still capped). Confirmed `validate_form_payload` (`_transfer_sanitize.py:78-99`) is called before any create/patch and rejects a payload with `truncated`/`omitted_fields` markers or a missing/empty `"form"`, mirroring `validate_export_version`'s existing "never half-import" pattern. `tests/test_transfer.py::test_form_export_does_not_truncate_oversized_form_payload` (TC15) builds a ~29KB synthetic form (`_oversized_form()`, 400 questions) and asserts the full record survives export untruncated; `test_form_import_refuses_truncated_or_incomplete_export_payload` (TC16) drives three distinct bad-payload shapes (empty `form`, missing `form`, explicit `truncated`/`omitted_fields` markers) through import and asserts `invalid_argument` with zero post/patch calls for each.
+- **No regression in AC1-AC8 behavior**: re-ran the full suite independently on this worktree at `cf66818`: `uv run pytest -q` -> **49 passed**, matching the Self-test table's claim exactly (baseline 46, +4 new TC13-TC16, net +3 after TC14 superseded the round-2 extra test). TC1-TC12's existing assertions (settings fidelity, `choicesSource.items`/`attrs` tenant-key stripping, status/owner/sharing exclusion, version refusal) are untouched by this diff and still pass.
+- **Chinese-text scan**: `grep -rnP '[\x{4e00}-\x{9fff}]' --exclude-dir=.git --exclude-dir=.venv --exclude='PRD-*-review.md' .` on this worktree at `cf66818` — hits only in `docs/tickets/PRD-21379.md` and `docs/tickets/PRD-21379-r2.md` (sibling ticket's own docs, quoting Chinese rule names verbatim). Confirmed untouched by this ticket's diff: `git diff 62e4dc0..HEAD --stat -- docs/tickets/PRD-21379.md docs/tickets/PRD-21379-r2.md` is empty, and `git log -1 -- docs/tickets/PRD-21379*.md` -> `f116e2a`, predating this ticket's base. Out of scope for this review, correctly not fixed here.
+- **README Connector section**: `diff <(sed -n '7,77p' README.md) <(cat ~/.claude/skills/vendor-mcp-development/reference/readme-connector-section.md)` — empty, byte-identical; untouched by this round regardless.
+- **COV3 (workspace-admins-only)**: no code change, reaffirmed. Re-read `server.py:61-96` — still only per-request `X-API-Key`/`X-MSP-Host`/`X-MSP-Tenant-Id`, no caller-role signal reaches this server; confirmed this cannot be implemented inside this MCP repo (no gateway/platform contract carries a role claim today). Correctly not treated as a code defect in this track — flagged in the rework doc for Micus/product, consistent with round 1's original, three-times-approved assumption. Not this repo's blocker.
+- **`.ac.json`**: `python scripts/ticket_store.py validate --ac docs/tickets/PRD-21397.ac.json --require-dw` -> `ledger OK: 16 cases`. All 16 cases accounted for (TC1-TC12 unchanged, TC13-TC16 new); every Done-when bucket (DW1-DW5) has at least one case per the rework doc's backfill table. TC2/TC3 remain `untested` (real multi-tenant INT account needed) — unchanged limitation from round 1, does not block per `references/mcp-track.md` §3 completion standard.
+- **Architecture / scope**: no new tool, no new header, no change to the per-request credential/tenant-isolation contract (`server.py`'s middleware untouched) — confirmed by the file list above; this rework stays entirely inside the existing export/import tool pair and its pure-function helpers.
+- **Connector wiki**: `docs.mspbots.ai/connectors/mspbots-forms.md` already exists (added at round 3, `52a707e`, verified 2026-10-30) and already describes the cross-tenant export/import capability this rework fixes ("Agents can also copy a form's definition from one of your tenants into another — exporting it to a file and importing that file"). COV1/COV2/FIND1 are internal correctness fixes with no new tool, no new credential field, and no change to the documented connect/verify steps — per `vendor-mcp-development/SKILL.md`'s connector-wiki-update step 2 ("decide whether this change needs a page update", paraphrased), this does not count as a user-visible change. No wiki update needed this round.
+
+### Standards checklist (`legs/review.md` R3 + `mcp-track.md` §4.3)
+
+| Item | Result |
+|---|---|
+| Credentials only from request headers, never logged/persisted; no shared state across requests | Unaffected by this round's diff |
+| Tool name/params/return/errors match tech design; errors structured | Unchanged tool signatures; `validate_form_payload` raises the same `TransferError` shape `validate_export_version` already uses |
+| Changed tools/params have matching test changes; Self-test has synced-code results and `tools/list` | Yes — TC13-TC16 added; Self-test table shows results on code synced with `main@62e4dc0` (up-to-date, no new commits during this tick) |
+| README Connector section matches reference verbatim | Yes (verified above) |
+| No Chinese anywhere shipped | Yes (verified above; sibling-ticket docs out of scope) |
+| Cross-repo headers/fields tolerate absence | N/A — no new cross-repo contract introduced |
+| SOP §14 checklist | Satisfied; `gitleaks` not installed in this environment (same gap noted rounds 1-3, no credential-shaped strings touched) |
+
