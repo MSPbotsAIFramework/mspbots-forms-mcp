@@ -4,7 +4,10 @@
     "ac": "AC1",
     "text": "Given a definition with ordinary fields across two pages and no data-source/tenant-scoped choices, When exported then imported, Then the imported definition equals the source definition except for the (new) form ID.",
     "type": "auto",
-    "tests": ["tests/test_transfer.py::test_export_then_import_roundtrip_is_field_for_field_identical"]
+    "tests": [
+      "tests/test_transfer.py::test_export_then_import_roundtrip_is_field_for_field_identical"
+    ],
+    "dw": "DW1"
   },
   {
     "id": "TC2",
@@ -19,7 +22,8 @@
     ],
     "expect": "The imported form's \"requires Microsoft 365 sign-in\", progress-bar, and thank-you-message settings are identical to the source form's",
     "result": "untested",
-    "notes": "needs a real multi-tenant INT form; cannot be reproduced as a pure-function unit test since this server has no local database"
+    "notes": "needs a real multi-tenant INT form; cannot be reproduced as a pure-function unit test since this server has no local database",
+    "dw": "DW2"
   },
   {
     "id": "TC3",
@@ -33,28 +37,38 @@
     ],
     "expect": "0 responses on the imported form, regardless of how many the source form had",
     "result": "untested",
-    "notes": "needs a real INT form with existing responses"
+    "notes": "needs a real INT form with existing responses",
+    "dw": "DW3"
   },
   {
     "id": "TC4",
     "ac": "AC4",
     "text": "Given a definition with one question using choicesByUrl, When strip_tenant_specific runs, Then that question has no choicesByUrl and no choices, and the report lists it with reason \"data-source-bound\".",
     "type": "auto",
-    "tests": ["tests/test_transfer.py::test_choices_by_url_field_is_stripped_and_reported"]
+    "tests": [
+      "tests/test_transfer.py::test_choices_by_url_field_is_stripped_and_reported"
+    ],
+    "dw": "DW4"
   },
   {
     "id": "TC5",
     "ac": "AC5",
     "text": "Given a definition with a client_org-style question whose static choices are objects carrying tenantId/haloClientId/rewstOrgId, When strip_tenant_specific runs, Then choices is cleared and the report lists the question with the matched key names.",
     "type": "auto",
-    "tests": ["tests/test_transfer.py::test_tenant_scoped_static_choices_are_stripped_and_reported"]
+    "tests": [
+      "tests/test_transfer.py::test_tenant_scoped_static_choices_are_stripped_and_reported"
+    ],
+    "dw": "DW4"
   },
   {
     "id": "TC6",
     "ac": "AC5",
     "text": "Given a definition with an ordinary question whose static choices are plain strings (no tenant-shaped keys), When strip_tenant_specific runs, Then the question is returned unchanged and does not appear in the report.",
     "type": "auto",
-    "tests": ["tests/test_transfer.py::test_ordinary_static_choices_are_not_over_stripped"]
+    "tests": [
+      "tests/test_transfer.py::test_ordinary_static_choices_are_not_over_stripped"
+    ],
+    "dw": "DW4"
   },
   {
     "id": "TC7",
@@ -65,28 +79,38 @@
       "tests/test_transfer.py::test_import_refuses_unsupported_export_version",
       "tests/test_transfer.py::test_import_refuses_missing_export_version",
       "tests/test_transfer.py::test_import_refuses_unsupported_version_without_any_write_call"
-    ]
+    ],
+    "dw": "DW1"
   },
   {
     "id": "TC8",
     "ac": "AC7",
     "text": "Given a successful import, Then the returned object contains form_id and a report key (empty list when nothing was flagged).",
     "type": "auto",
-    "tests": ["tests/test_transfer.py::test_import_returns_form_id_and_report"]
+    "tests": [
+      "tests/test_transfer.py::test_import_returns_form_id_and_report"
+    ],
+    "dw": "DW5"
   },
   {
     "id": "TC9",
     "ac": "AC8",
     "text": "Given strip_tenant_specific runs on a definition built under a simulated tenant-A fixture carrying known tenant-A-only identifiers, When the result is asserted against, Then none of those identifiers survive un-flagged in the output.",
     "type": "auto",
-    "tests": ["tests/test_transfer.py::test_tenant_a_identifiers_do_not_survive_unflagged"]
+    "tests": [
+      "tests/test_transfer.py::test_tenant_a_identifiers_do_not_survive_unflagged"
+    ],
+    "dw": "DW4"
   },
   {
     "id": "TC10",
     "ac": "AC1",
     "text": "tests/test_tools.py::test_tools_list_snapshot passes with 16 tools including the two new ones and their expected required-params/annotations.",
     "type": "auto",
-    "tests": ["tests/test_tools.py::test_tools_list_snapshot"]
+    "tests": [
+      "tests/test_tools.py::test_tools_list_snapshot"
+    ],
+    "dw": "DW1"
   },
   {
     "id": "TC11",
@@ -94,7 +118,10 @@
     "source": "dev",
     "text": "Given a definition with a client_org-style question whose static choices live under choicesSource.items (items carrying tenantId/haloClientId/rewstOrgId nested inside an \"attrs\" dict) instead of a top-level choices list -- the real shape confirmed live on sibling ticket PRD-21379 -- When strip_tenant_specific runs, Then choicesSource is dropped, choices is cleared, and the report lists the question with the matched key names.",
     "type": "auto",
-    "tests": ["tests/test_transfer.py::test_choices_source_shaped_tenant_scoped_choices_are_stripped_and_reported"]
+    "tests": [
+      "tests/test_transfer.py::test_choices_source_shaped_tenant_scoped_choices_are_stripped_and_reported"
+    ],
+    "dw": "DW4"
   },
   {
     "id": "TC12",
@@ -102,6 +129,53 @@
     "source": "dev",
     "text": "Given the exported form record carries a status field (and an owner/sharing-shaped field), When imported, Then neither reaches the PATCH body, while an ordinary sibling setting (e.g. showProgressBar) still does.",
     "type": "auto",
-    "tests": ["tests/test_transfer.py::test_import_excludes_status_and_sharing_shaped_keys_from_patch_body"]
+    "tests": [
+      "tests/test_transfer.py::test_import_excludes_status_and_sharing_shaped_keys_from_patch_body"
+    ],
+    "dw": "DW2"
+  },
+  {
+    "id": "TC13",
+    "ac": "AC9",
+    "dw": "DW1",
+    "source": "rework r2 (comment 1600390000061251)",
+    "text": "Given a source form whose raw SurveyJS definition carries its own top-level \"title\" key (the real-world shape -- round 1's SOURCE_FORM fixture omitted it), When mspbots_forms_form_import runs, Then the \"title\" key inside the definition handed to the PATCH call equals the suffixed new title (source title + title_suffix), not the source's original title -- so the backend cannot re-derive the stored/displayed title from the nested definition and silently discard the \" (imported)\" suffix (COV1: the tool's own echoed return value already said the right title, but the stored title equalled the source's because the PATCHed definition's own title field still carried the old value).",
+    "type": "auto",
+    "tests": [
+      "tests/test_transfer.py::test_import_overrides_title_inside_definition_as_well_as_outer_patch_body"
+    ]
+  },
+  {
+    "id": "TC14",
+    "ac": "AC4",
+    "dw": "DW4",
+    "source": "rework r2 (comment 1600390000061251)",
+    "text": "Given a definition with a question whose choices live under \"choicesSource\" and whose items carry no TENANT_SCOPED_CHOICE_KEYS match (the externally/dynamically-sourced shape QA-NIGHT found live on INT, as opposed to the cached-static-items shape TC11 already covers), When strip_tenant_specific runs, Then that question is still treated as data-source-bound: \"choicesSource\" is dropped, \"choices\" is cleared, and the question appears in the report -- same unconditional treatment as choicesByUrl, not conditioned on a tenant-key match (COV2: the round-1 code only stripped choicesSource when a tenant-scoped key happened to match, so a live data-source choicesSource with no such key stayed bound and unreported, and its source parameters were carried into the destination tenant unflagged).",
+    "type": "auto",
+    "tests": [
+      "tests/test_transfer.py::test_choices_source_without_tenant_key_match_is_still_treated_as_data_source_bound"
+    ]
+  },
+  {
+    "id": "TC15",
+    "ac": "AC1",
+    "dw": "DW1",
+    "source": "rework r2 (comment 1600390000061251)",
+    "text": "Given a form whose full record (definition + questions + versions) serializes to more than dump_json_capped's 20,000-char budget (e.g. 80 questions / ~34KB, the size class QA-NIGHT reproduced and this ticket's own PRECICOM/Ginko-sized target forms fall into), When mspbots_forms_form_export runs, Then the returned payload's \"form\" key is the complete, untruncated record -- no \"truncated\"/\"omitted_fields\" keys and no dropped \"form\" field -- because export output is saved to a file for a later import, not consumed as agent-facing conversation context, so the generic token-budget cap must not apply to it (FIND1: the generic dump_json_capped helper shed the entire \"form\" field for oversized forms, since a dict export envelope has no list-shaped field for the existing truncation path to shrink instead).",
+    "type": "auto",
+    "tests": [
+      "tests/test_transfer.py::test_form_export_does_not_truncate_oversized_form_payload"
+    ]
+  },
+  {
+    "id": "TC16",
+    "ac": "AC1",
+    "dw": "DW1",
+    "source": "rework r2 (comment 1600390000061251)",
+    "text": "Given an export_payload whose \"form\" key is missing, empty, or marked truncated/omitted (e.g. a payload produced by the FIND1 bug before its fix, or any other producer of a malformed envelope), When mspbots_forms_form_import is called, Then it refuses with a clear invalid_argument error and makes no post/patch call -- never silently creating an empty \"Untitled form\" (FIND1's second half: import's own validate_export_version check only looks at export_version, so a structurally-incomplete \"form\" silently passed through and produced an empty shell form).",
+    "type": "auto",
+    "tests": [
+      "tests/test_transfer.py::test_form_import_refuses_truncated_or_incomplete_export_payload"
+    ]
   }
 ]
