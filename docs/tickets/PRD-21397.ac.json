@@ -80,7 +80,7 @@
       "tests/test_transfer.py::test_import_refuses_missing_export_version",
       "tests/test_transfer.py::test_import_refuses_unsupported_version_without_any_write_call"
     ],
-    "dw": "DW1"
+    "dw": "DW6"
   },
   {
     "id": "TC8",
@@ -159,7 +159,7 @@
   {
     "id": "TC15",
     "ac": "AC1",
-    "dw": "DW1",
+    "dw": "DW6",
     "source": "rework r2 (comment 1600390000061251)",
     "text": "Given a form whose full record (definition + questions + versions) serializes to more than dump_json_capped's 20,000-char budget (e.g. 80 questions / ~34KB, the size class QA-NIGHT reproduced and this ticket's own PRECICOM/Ginko-sized target forms fall into), When mspbots_forms_form_export runs, Then the returned payload's \"form\" key is the complete, untruncated record -- no \"truncated\"/\"omitted_fields\" keys and no dropped \"form\" field -- because export output is saved to a file for a later import, not consumed as agent-facing conversation context, so the generic token-budget cap must not apply to it (FIND1: the generic dump_json_capped helper shed the entire \"form\" field for oversized forms, since a dict export envelope has no list-shaped field for the existing truncation path to shrink instead).",
     "type": "auto",
@@ -170,12 +170,58 @@
   {
     "id": "TC16",
     "ac": "AC1",
-    "dw": "DW1",
+    "dw": "DW6",
     "source": "rework r2 (comment 1600390000061251)",
     "text": "Given an export_payload whose \"form\" key is missing, empty, or marked truncated/omitted (e.g. a payload produced by the FIND1 bug before its fix, or any other producer of a malformed envelope), When mspbots_forms_form_import is called, Then it refuses with a clear invalid_argument error and makes no post/patch call -- never silently creating an empty \"Untitled form\" (FIND1's second half: import's own validate_export_version check only looks at export_version, so a structurally-incomplete \"form\" silently passed through and produced an empty shell form).",
     "type": "auto",
     "tests": [
       "tests/test_transfer.py::test_form_import_refuses_truncated_or_incomplete_export_payload"
     ]
+  },
+  {
+    "id": "TC17",
+    "ac": "AC10",
+    "text": "Given the repository README, When it is read, Then it contains an access-control note stating that mspbots_forms_form_export and mspbots_forms_form_import are to be allowed for the workspace admin role only through the connector per-tool allowlist, and that the server itself performs no role check.",
+    "type": "auto",
+    "steps": [
+      "Read README.md from the merged main",
+      "Search the Tools/Access section for both tool names next to the words workspace admin and allowlist"
+    ],
+    "expect": "README names both tools, says allow them for the workspace admin role only via the connector allowlist, and says the server does no role check",
+    "result": "untested",
+    "notes": "pytest that reads README.md; source: rework r3 (description rewrite 2026-11-17, Done-when 7)",
+    "dw": "DW7",
+    "tests": [
+      "tests/test_readme_access_note.py::test_readme_has_admin_only_allowlist_note"
+    ]
+  },
+  {
+    "id": "TC18",
+    "ac": "AC10",
+    "text": "Given the MSPbots Forms connector page https://docs.mspbots.ai/connectors/mspbots-forms/, When the deployment checklist on the page is read, Then it says to allow mspbots_forms_form_export and mspbots_forms_form_import for the workspace admin role only, and to leave them denied for other roles.",
+    "type": "manual",
+    "steps": [
+      "Open https://docs.mspbots.ai/connectors/mspbots-forms/ after the wiki change is published",
+      "Find the deployment checklist / access section"
+    ],
+    "expect": "The page lists both tool names and says workspace admin role only",
+    "result": "untested",
+    "notes": "the page has no such text on 2026-11-17; the review leg writes it (mcp-track 4.5)",
+    "dw": "DW7"
+  },
+  {
+    "id": "TC19",
+    "ac": "AC10",
+    "text": "Given the test tenant (mspbots.ai, and 2qmxyw for the import side), When the connector allowlist is opened for the MSPbots Forms connector, Then mspbots_forms_form_export and mspbots_forms_form_import are allowed for the workspace admin role only and denied for member.",
+    "type": "manual",
+    "steps": [
+      "In the test tenant open the MSPbots Forms connector access settings",
+      "Read the per-role allowlist for the two tools",
+      "Call the tools as a non-admin member and check the call is refused by the gateway"
+    ],
+    "expect": "Allowed for workspace admin only; the member call is refused",
+    "result": "untested",
+    "notes": "allowlist is configured by a tenant admin in the platform UI, not by code; QA needs an admin of the test tenant",
+    "dw": "DW7"
   }
 ]
