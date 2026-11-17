@@ -115,6 +115,10 @@ Implements the [Model Context Protocol](https://modelcontextprotocol.io/) (Strea
 | Transfer | `mspbots_forms_form_export` | — produces a versioned JSON file |
 | | `mspbots_forms_form_import` | — creates a new unpublished draft; data-source/tenant-scoped fields are imported unbound and flagged in a report (PRD-21397) |
 
+### Access control (PRD-21397)
+
+In the connector's per-tool allowlist, allow `mspbots_forms_form_export` and `mspbots_forms_form_import` for the **workspace admin** role only, and leave them denied for every other role (deny-by-default already applies). This server performs no role check of its own: it receives no user role, so the allowlist is the only gate.
+
 Per the contract, the public respondent-facing endpoints (`/api/public/*` — unlock, save draft, submit) are **deliberately not exposed as tools**: an agent shouldn't be able to submit a form on an anonymous respondent's behalf.
 
 ## Quick Start
