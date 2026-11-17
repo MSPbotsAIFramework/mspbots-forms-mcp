@@ -1,6 +1,6 @@
 # PRD-21397 · Code review
 
-Status: frozen @ cf66818
+Status: frozen @ 75a8000
 
 ## Round 1 · 2026-10-29 · reviewed dev/PRD-21397 @ 47b110b (base main @ 35c6ccf)
 
