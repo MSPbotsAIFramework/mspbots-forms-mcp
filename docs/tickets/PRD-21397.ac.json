@@ -188,12 +188,13 @@
       "Search the Tools/Access section for both tool names next to the words workspace admin and allowlist"
     ],
     "expect": "README names both tools, says allow them for the workspace admin role only via the connector allowlist, and says the server does no role check",
-    "result": "untested",
+    "result": "pass",
     "notes": "pytest that reads README.md; source: rework r3 (description rewrite 2026-11-17, Done-when 7)",
     "dw": "DW7",
     "tests": [
       "tests/test_readme_access_note.py::test_readme_has_admin_only_allowlist_note"
-    ]
+    ],
+    "evidence": "uv run pytest tests/test_readme_access_note.py -> passed; full suite 50 passed (dev08, 2026-11-17)"
   },
   {
     "id": "TC18",
